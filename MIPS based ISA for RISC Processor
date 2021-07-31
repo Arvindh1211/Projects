@@ -1,0 +1,19 @@
+module alu_control( alu_control_IN, aluop, fun_in);  
+ output reg[7:0] alu_control_IN;  
+ input [1:0] aluop;  
+ input [5:0] fun_in;  
+ wire [7:0] control_in;  
+ assign control_in = {aluop,fun_in};  
+ always @(control_in)  
+ casex (control_in)  
+  8'b11xxxxxx: alu_control_IN=8'h22;  
+  8'b10xxxxxx: alu_control_IN=8'h20;  
+  8'b01xxxxxx: alu_control_IN=8'h00;  
+  8'b00100000: alu_control_IN=8'h20;  
+  8'b00100010: alu_control_IN=8'h22;  
+  8'b00100100: alu_control_IN=8'h24;  
+  8'b00100101: alu_control_IN=8'h25;  
+  8'b00000000: alu_control_IN=8'h00;  
+  default: alu_control_IN=8'h00;  
+  endcase  
+ endmodule  
