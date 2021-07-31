@@ -1,3 +1,5 @@
+**********************************alu_control.v*******************************************
+
 module alu_control( alu_control_IN, aluop, fun_in);  
  output reg[7:0] alu_control_IN;  
  input [1:0] aluop;  
@@ -17,3 +19,584 @@ module alu_control( alu_control_IN, aluop, fun_in);
   default: alu_control_IN=8'h00;  
   endcase  
  endmodule  
+
+
+****************************************cache.v*******************************************
+
+module cache (data_address_in,write_data,read_data,hit,miss);
+  
+  input [4:0]data_address_in;
+  input write_data;
+  output reg [31:0]read_data;
+  output reg hit,miss;
+  
+  
+ 
+  reg [1:0]tag[3:0];
+  
+  reg [31:0]cache_memory[3:0][1:0];
+  
+  reg [31:0]data[15:0][1:0];
+  reg [31:0]data1[15:0][1:0];
+  reg [3:0]w;
+  reg y;
+  
+  initial
+      begin
+           $readmemb("data.txt", data);
+           $readmemb("cache_memory.txt", cache_memory);
+           $readmemb("tag.txt", tag);
+           $writememb("data_memory_write.txt", data1);
+           $writememb("cache_memory_write.txt", cache_memory);
+           $writememb("tag_write.txt", tag);
+           
+     end    
+
+ always@ (*)
+ begin
+   data1[data_address_in[4:1]][data_address_in[0]] <= write_data; 
+   
+   
+ if (data_address_in[4:3] == tag [data_address_in[2:1]])
+  begin
+    hit = 1'b1;
+    miss = 1'b0;
+    read_data = cache_memory[data_address_in[2:1]][data_address_in[0]];
+    
+  end 
+ else 
+   begin
+     hit = 1'b0;
+     miss = 1'b1;
+     w = data_address_in[4:1];
+     y = data_address_in[0];
+     read_data = data[w][y];
+   end  
+ end
+endmodule
+
+*************************************************data_memory.v******************************************
+
+module data_memory (in_address,write_data_in,enable_write,enable_read,data_out,hit,miss); 
+input [31:0] in_address; 
+input [31:0] write_data_in;  
+input enable_write;  
+input enable_read;  
+output reg [31:0]data_out; 
+/*reg[31:0]data[31:0]; 
+reg[31:0]data1[31:0];
+reg [7:0]w; */
+
+reg [4:0]cache_out_address;
+reg [31:0]cache_write_data;
+wire [31:0]cache_read_data;
+output hit,miss;
+
+cache uut1(cache_out_address,cache_write_data,cache_read_data,hit,miss);
+
+
+ always@ (in_address)
+ begin
+ if(enable_read)
+  begin
+  cache_out_address = in_address[4:0];
+  data_out = cache_read_data;  
+  end
+ else if (enable_write)
+   begin
+   cache_out_address = in_address[4:0];
+   cache_write_data =  write_data_in;
+   end 
+ end
+ 
+ endmodule   
+
+
+
+*************************************************************EX_MEM***********************************************
+
+module EX_MEM(WB,M,add_result,zero,alu_result,read_data_2,mux_out,total_out,clk,reset);
+
+input [2:0]WB,M;
+input [31:0]add_result,alu_result,read_data_2;
+input zero;
+input [4:0]mux_out;
+output reg [107:0]total_out;
+input clk,reset;
+
+   always@ (posedge clk)
+  begin
+    
+    if (reset)
+       begin
+          total_out = 108'd0;
+       end 
+       
+  else if(reset == 0)
+       begin
+          total_out = {WB,M,add_result,zero,alu_result,read_data_2,mux_out};
+        end
+        
+end
+endmodule
+
+
+
+**************************************************** ID_EX***********************************************************
+
+module ID_EX(WB,M,EX,add_in,read_data_1,read_data_2,sign_ext_in,inst_20_16_in,inst_15_11_in,total_out,clk,reset);
+  
+  input [2:0]WB,M;
+  input [4:0]EX;
+  input [31:0]add_in,read_data_1,read_data_2,sign_ext_in;
+  input [4:0]inst_20_16_in,inst_15_11_in;
+  output reg [148:0]total_out;
+  input clk,reset;
+  
+  always@ (posedge clk)
+  
+  begin
+    
+    if (reset)
+       begin
+          total_out = 149'd0;
+       end 
+       
+  else if(reset == 0)
+       begin
+          total_out = {WB,M,EX,add_in,read_data_1,read_data_2,sign_ext_in,inst_20_16_in,inst_15_11_in};
+        end
+        
+end
+
+endmodule              
+
+
+*********************************************************IF_ID******************************************************
+
+module IF_ID(add_in,instr_in,total_out,clk,reset);
+  
+  input [31:0]add_in;
+  input [31:0]instr_in;
+  output reg [63:0]total_out;
+  input reset,clk;
+  
+  always@ (posedge clk)
+  begin
+  if(reset)
+    begin
+      total_out = 64'd0;
+    end
+    
+ else if (reset == 0)
+ 
+     begin
+        total_out = {add_in,instr_in};
+        
+     end
+     
+  end       
+       
+  
+endmodule
+
+**********************************************instruction_memory.v*************************************
+
+module instruction_memory(in,out);         
+input [31:0] in;  
+output [31:0] out;  
+ wire [6 : 0] inst_mem_addr = in[6 : 0];  
+reg [31:0] inst_mem[31:0];  
+
+assign out = (0 < in[15:0] < 25 )? inst_mem[inst_mem_addr]: 32'd0;
+
+initial  
+ begin  
+ $readmemb("inst_mem.txt", inst_mem);
+                              
+end  
+
+ endmodule   
+
+      /* lw $t0, 8($t1) -----exit
+         add $t0,$s2,$t0
+         beq $t0,$s3,loop 
+         add $t0,$s0,$t0 
+         j exit  ----loop
+         sw $t0, 8($t1)    
+ */  
+ 
+ 
+ *******************************************************MEM_WB**************************************************
+ 
+ module MEM_WB(WB,read_data,alu_result,mux_in,total_out,clk,reset);
+
+input [2:0]WB;
+input [31:0]read_data,alu_result;
+input [4:0]mux_in; 
+
+input clk,reset;
+
+output reg [71:0] total_out;
+
+
+ always@ (posedge clk)
+  begin
+    
+    if (reset)
+       begin
+          total_out = 72'd0;
+       end 
+       
+  else if(reset == 0)
+       begin
+          total_out = {WB,read_data,alu_result,mux_in};
+        end
+        
+end
+endmodule
+
+***********************************************************mips_top***********************************************************
+
+module mips_top(pc_out,Alu_out,clk,reset);
+  
+  output [31:0]Alu_out,pc_out;
+  
+  input clk,reset;
+  
+  reg [31:0]pc1;
+  wire [31:0] pc2;
+  wire [31:0]add_4_out;
+  wire [31:0]inst_mem_out,alu_out;
+  wire [63:0]if_id_out;
+  wire [31:0]w4,w8,w2,w9,add_result,w10;
+  wire [4:0]w7,w5;
+  
+  wire [31:0] reg_read_data_1,reg_read_data_2,sign_extend_out;
+  wire [2:0]WB,M;
+  wire [4:0]EX;
+  wire jump,zero,pc_src;
+  wire [148:0]id_ex_out;
+  wire [27:0]shift1_out;
+  wire [31:0]shift2_out,data_out;
+  wire [7:0] alu_control_IN;
+  wire [107:0]ex_mem_out;
+  wire [71:0]mem_wb_out;
+  wire [31:0]w3;
+  
+  
+  always@ (posedge clk or posedge reset)
+  begin
+    if(reset)
+      begin
+      pc1 = 32'b10000000000000000000000000100;
+      end
+  else if(reset == 0)
+      begin
+      pc1 = pc2 ;
+      end 
+      
+  end    
+  //stage1
+  
+  assign add_4_out = pc1 + 32'd4; 
+  
+  instruction_memory uut1(pc1,inst_mem_out);
+  
+  IF_ID uut2(add_4_out,inst_mem_out,if_id_out,clk,reset);
+  
+  assign w2 = {add_4_out[31-26],shift1_out};
+  
+  assign w3 = (pc_src==1'b1)? w9 : add_4_out ;
+  
+  assign pc2 = (jump == 1'b1)? w2 : w3;
+  
+ //stage2
+ 
+  assign w4 = if_id_out[63:32];
+  
+  system_registers uut3(mem_wb_out[71],w7,w8,if_id_out[25:21],reg_read_data_1,if_id_out[20:16], reg_read_data_2);
+  
+  assign sign_extend_out = {{16{if_id_out[15]}},if_id_out[15:0]};
+ 
+  system_control uut4(if_id_out[31:26],reset,WB,M,EX,jump);
+  
+  assign shift1_out = {if_id_out[25:0],2'd0};
+ 
+  
+  ID_EX uut5(WB,M,EX,w4,reg_read_data_1,reg_read_data_2,sign_extend_out,if_id_out[20:16],if_id_out[15:11],id_ex_out,clk,reset);
+  
+  
+  //stage3
+  
+  
+  assign shift2_out = {id_ex_out[39:10],2'd0};
+  
+  assign add_result = shift2_out + id_ex_out[137:106];
+  
+  assign w10 = (id_ex_out[138]==1'b1)? id_ex_out[41:10] : id_ex_out[73:42];
+  
+  system_alu uut6(id_ex_out[137:106],w10,alu_control_IN,alu_out,zero);
+
+ 
+
+  alu_control uut7( alu_control_IN, id_ex_out[140:139], id_ex_out[15:10]);
+
+   assign w5 = (id_ex_out[142:141]==1'd1)? id_ex_out[4:0] : id_ex_out[9:5];
+  
+  EX_MEM uut8(id_ex_out[148:146],id_ex_out[145:143],add_result,zero,alu_out,id_ex_out[73:42],w5,ex_mem_out,clk,reset);
+  
+  
+  //stage4
+  
+  assign w9 = ex_mem_out[101:70];
+  assign pc_src = ex_mem_out[104] & ex_mem_out[69];
+  
+  data_memory uut9(ex_mem_out[68:37],ex_mem_out[36:5],ex_mem_out[102],ex_mem_out[103],data_out);
+  
+  MEM_WB uut10(ex_mem_out[107:105],data_out,ex_mem_out[68:37],ex_mem_out[4:0],mem_wb_out,clk,reset);
+  
+  
+  //stage5
+assign w7 = mem_wb_out[4:0];
+assign w8 = (mem_wb_out[70:69] == 2'b01)? mem_wb_out[68:37] : mem_wb_out[36:5];
+
+
+//final
+
+assign pc_out = pc1;
+
+assign Alu_out = alu_out;
+
+  
+endmodule
+  
+**********************************************************system_alu***************************************************
+
+
+module system_alu(in1,in2,alu_control_in,out,zero);
+input [31:0] in1;            
+input [31:0] in2;           
+input [7:0]alu_control_in;       
+output reg [31:0]out;                
+output  zero;  
+   
+   
+
+assign zero = (out== 32'd0)? 1'd1 : 1'd0;
+   
+always @(*)  
+ begin   
+      case(alu_control_in)  
+      8'h20: out = in1 + in2; // add  
+      8'h22: out = in1 - in2; // sub  
+      8'h24: out = in1 & in2; // and  
+      8'h25: out = in1 | in2; // or  
+      8'h2b: begin if (in1<in2) out = 32'd1;  
+                     else out = 32'd0;  
+                     end  
+      default:out = in1 + in2; // add  
+      endcase  
+ end  
+  
+ endmodule  
+
+*******************************************************system_control***************************************************
+
+module system_control(opcode,reset,WB,M,EX,jump_out);
+ input[5:0] opcode;  
+ input reset;  
+ 
+ output [2:0]WB;
+ output [2:0]M;
+ output [4:0]EX;
+ output  reg jump_out;
+reg[1:0] reg_dst_out,mem_to_reg_out,alu_op_out;  
+ reg branch_out,mem_read_out,mem_write_out,alu_src_out,reg_write_out,sign_or_zero_out;  
+                            
+  assign WB = {reg_write_out,mem_to_reg_out};
+  assign M = {branch_out,mem_read_out,mem_write_out};
+  assign EX = {reg_dst_out,alu_op_out,alu_src_out};
+                                             
+    
+ always @(*)  
+ begin  
+      if(reset == 1'b1) begin  
+                reg_dst_out = 2'b00;  
+                mem_to_reg_out = 2'b00;  
+                alu_op_out = 2'b00;  
+                jump_out = 1'b0;  
+                branch_out = 1'b0;  
+                mem_read_out = 1'b0;  
+                mem_write_out = 1'b0;  
+                alu_src_out = 1'b0;  
+                reg_write_out = 1'b0;  
+                sign_or_zero_out = 1'b1;  
+           
+      end  
+      else begin  
+      case(opcode)   
+      6'd0: begin // add  
+                reg_dst_out = 2'b01;  
+                mem_to_reg_out = 2'b00;  
+                alu_op_out = 2'b00;  
+                jump_out = 1'b0;  
+                branch_out = 1'b0;  
+                mem_read_out = 1'b0;  
+                mem_write_out = 1'b0;  
+                alu_src_out = 1'b0;  
+                reg_write_out = 1'b1;  
+                sign_or_zero_out = 1'b1;
+                  
+                end  
+       
+       6'd35: begin // lw  
+                reg_dst_out = 2'b11;  
+                mem_to_reg_out = 2'b01;  
+                alu_op_out = 2'b10;  
+                jump_out = 1'b0;  
+                branch_out = 1'b0;  
+                mem_read_out = 1'b1;  
+                mem_write_out = 1'b0;  
+                alu_src_out = 1'b1;  
+                reg_write_out = 1'b1;  
+                sign_or_zero_out = 1'b1;  
+                end  
+                
+        6'd43: begin // sw  
+                reg_dst_out = 2'b00;  
+                mem_to_reg_out = 2'b00;  
+                alu_op_out = 2'b10;  
+                jump_out = 1'b0;  
+                branch_out = 1'b0;  
+                mem_read_out = 1'b0;  
+                mem_write_out = 1'b1;  
+                alu_src_out = 1'b1;  
+                reg_write_out = 1'b0;  
+                sign_or_zero_out = 1'b1;  
+                end
+                          
+        6'd2: begin // j  
+                reg_dst_out = 2'b00;  
+                mem_to_reg_out = 2'b00;  
+                alu_op_out = 2'b00;  
+                jump_out = 1'b1;  
+                branch_out = 1'b0;  
+                mem_read_out = 1'b0;  
+                mem_write_out = 1'b0;  
+                alu_src_out = 1'b0;  
+                reg_write_out = 1'b0;  
+                sign_or_zero_out = 1'b1;  
+                end  
+                
+        6'd4: begin // beq  
+                reg_dst_out = 2'b00;  
+                mem_to_reg_out = 2'b00;  
+                alu_op_out = 2'b11;  
+                jump_out = 1'b0;  
+                branch_out = 1'b1;  
+                mem_read_out = 1'b0;  
+                mem_write_out = 1'b0;  
+                alu_src_out = 1'b0;  
+                reg_write_out = 1'b0;  
+                sign_or_zero_out = 1'b1;  
+                end      
+                            
+      default: begin  
+                reg_dst_out = 2'b01;  
+                mem_to_reg_out = 2'b00;  
+                alu_op_out = 2'b00;  
+                jump_out = 1'b0;  
+                branch_out = 1'b0;  
+                mem_read_out = 1'b0;  
+                mem_write_out = 1'b0;  
+                alu_src_out = 1'b0;  
+                reg_write_out = 1'b1;  
+                sign_or_zero_out = 1'b1;  
+                end  
+      endcase  
+      end  
+ end  
+ endmodule  
+ 
+ ***********************************************************system_registers***********************************
+ 
+ module system_registers(reg_write_en,reg_write_dest,reg_write_data,reg_read_addr_1,reg_read_data_1,reg_read_addr_2, reg_read_data_2);  
+    
+input reg_write_en;  
+input [4:0] reg_write_dest;  
+input [31:0]reg_write_data;  
+input [4:0] reg_read_addr_1;  
+output reg [31:0] reg_read_data_1;  
+input [4:0] reg_read_addr_2;  
+output reg [31:0] reg_read_data_2;  
+reg [31:0]reg_array [31:0];  
+        
+initial begin
+		$readmemb("registers.txt", reg_array);
+	end
+      always @ (reg_write_data) 
+      begin  
+          if (reg_write_en)
+              begin
+           $writememb("register_out.txt", reg_array);
+           reg_array[reg_write_dest] = reg_write_data;
+                end  
+      end  
+     
+      
+      
+      always@ (reg_read_addr_1,reg_read_addr_2)
+      begin 
+       reg_read_data_1 =  reg_array[reg_read_addr_1];  
+       reg_read_data_2 =  reg_array[reg_read_addr_2]; 
+     end  
+ endmodule 
+ 
+ 
+ ******************************************************tb.v******************************************
+ 
+ module tb();
+  
+  wire [31:0]Alu_out,pc_out;
+  
+  reg clk,reset;
+  
+  
+  mips_top uut(pc_out,Alu_out,clk,reset);
+  
+  
+  initial
+  begin
+    
+    reset = 1;
+    clk = 0;
+   #20
+   
+   reset = 0;
+   
+ end
+ 
+ always
+ begin
+ #5 clk = ~ clk;
+ end
+ 
+ 
+ endmodule
+ 
+  
+  
+  
+
+
+
+
+   
+  
+  
+  
+  
+   
+
+  
